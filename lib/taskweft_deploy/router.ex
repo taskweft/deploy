@@ -39,8 +39,12 @@ defmodule TaskweftDeploy.Router do
     validate_origin: false
   ]
 
+  # Version follows the dev/beta/rc/release ladder (v<major>.<minor>.<patch>-<stage>.<N>);
+  # bump alongside the git tag created after each deploy.
+  @release_version "0.1.0-dev.1"
+
   get "/health" do
-    send_resp(conn, 200, "ok")
+    send_json(conn, 200, %{"status" => "ok", "version" => @release_version})
   end
 
   get "/.well-known/oauth-protected-resource" do
