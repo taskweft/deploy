@@ -4,32 +4,41 @@
 defmodule TaskweftDeploy.Application do
   @moduledoc """
   Boots the hosted Taskweft MCP server: a Cowboy endpoint running
-  `TaskweftDeploy.Router`, which gates every MCP request behind a GitHub
-  identity whitelist and forwards the rest to `ExMCP.HttpPlug`.
+  `TaskweftDeploy.Router`, which bridges MCP-client OAuth to GitHub login and
+  gates MCP requests behind a macaroon access token. No database, no volume —
+  all OAuth state is a stateless macaroon (`TaskweftDeploy.Artifact`), so
+  scale-to-zero restarts lose nothing.
 
-  Config (runtime env):
+  Runtime env:
 
     * `PORT` — listen port (default 8080; Fly maps 443/TLS → this).
-    * `TASKWEFT_MCP_GH_ALLOW` — comma-separated whitelist. Bare entries are
-      GitHub logins; `@name` or `org:name` entries are org memberships.
-      Default `"fire"`.
+    * `TASKWEFT_TOKEN_SECRET` — macaroon root key (**required in prod**; a stable
+      value so tokens survive restarts). A random key is used if unset (dev only).
+    * `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — the GitHub OAuth app.
+    * `TASKWEFT_MCP_GH_ALLOW` — whitelist (comma list; bare = login, `@name`/`org:name` = org). Default `fire`.
+    * `PUBLIC_BASE_URL` — external URL (issuer); derived from Fly's forwarded headers if unset.
   """
 
   use Application
   require Logger
 
-  @auth_cache :taskweft_gh_auth_cache
-
   @impl true
   def start(_type, _args) do
-    ensure_cache()
-    :persistent_term.put({:taskweft_deploy, :auth}, parse_allow(allow_env()))
+    :persistent_term.put({:taskweft_deploy, :token_secret}, token_secret())
+    :persistent_term.put({:taskweft_deploy, :auth}, parse_allow(env("TASKWEFT_MCP_GH_ALLOW", "fire")))
 
-    port = String.to_integer(System.get_env("PORT", "8080"))
-
-    Logger.info(
-      "taskweft MCP listening on 0.0.0.0:#{port} — whitelist #{inspect(:persistent_term.get({:taskweft_deploy, :auth}))}"
+    :persistent_term.put(
+      {:taskweft_deploy, :github},
+      %{client_id: env("GITHUB_CLIENT_ID", ""), client_secret: env("GITHUB_CLIENT_SECRET", "")}
     )
+
+    case env("PUBLIC_BASE_URL", nil) do
+      url when is_binary(url) and url != "" -> :persistent_term.put({:taskweft_deploy, :base_url}, url)
+      _ -> :ok
+    end
+
+    port = String.to_integer(env("PORT", "8080"))
+    Logger.info("taskweft MCP (OAuth/GitHub) listening on 0.0.0.0:#{port}")
 
     children = [
       {Plug.Cowboy,
@@ -39,13 +48,24 @@ defmodule TaskweftDeploy.Application do
     Supervisor.start_link(children, strategy: :one_for_one, name: TaskweftDeploy.Supervisor)
   end
 
-  defp ensure_cache do
-    if :ets.whereis(@auth_cache) == :undefined do
-      :ets.new(@auth_cache, [:named_table, :public, :set, read_concurrency: true])
+  defp token_secret do
+    case env("TASKWEFT_TOKEN_SECRET", nil) do
+      s when is_binary(s) and byte_size(s) >= 16 ->
+        s
+
+      _ ->
+        Logger.warning("TASKWEFT_TOKEN_SECRET unset/short — using an ephemeral dev key (tokens won't survive restart)")
+        :crypto.strong_rand_bytes(32)
     end
   end
 
-  defp allow_env, do: System.get_env("TASKWEFT_MCP_GH_ALLOW", "fire")
+  defp env(name, default) do
+    case System.get_env(name) do
+      nil -> default
+      "" -> default
+      v -> v
+    end
+  end
 
   # "fire,@taskweft,org:V-Sekai-fire" -> %{logins: MapSet, orgs: MapSet}
   defp parse_allow(str) do

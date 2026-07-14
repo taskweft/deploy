@@ -29,7 +29,12 @@ defmodule TaskweftDeploy.MixProject do
       # in one dep. Its OTP app starts nothing unless it is the Burrito binary.
       {:taskweft, github: "taskweft/taskweft"},
       {:plug_cowboy, "~> 2.7"},
-      {:req, "~> 0.6"}
+      {:req, "~> 0.6"},
+      # Assent = the GitHub OAuth *client* leg (DB-free; the same lib pow_assent
+      # wraps in v-sekai zone-backend). Access/code/state/client artifacts are
+      # our own macaroons (TaskweftDeploy.Macaroon, :crypto only) — no Ecto/Pow/
+      # Postgres and no token library; every artifact is stateless.
+      {:assent, "~> 0.2.13"}
     ]
   end
 end
