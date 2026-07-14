@@ -28,7 +28,7 @@ defmodule TaskweftDeploy.OAuth do
 
   def protected_resource_metadata(base) do
     %{
-      "resource" => base,
+      "resource" => base <> "/mcp",
       "authorization_servers" => [base],
       "bearer_methods_supported" => ["header"],
       "scopes_supported" => ["mcp"],
