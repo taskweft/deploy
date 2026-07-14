@@ -12,8 +12,11 @@ scale-to-zero restart.
 
 ## Connect
 
+`https://taskweft-mcp.fly.dev/` is a static landing page, not the MCP
+endpoint — that's `/mcp`:
+
 ```json
-{ "mcpServers": { "taskweft": { "type": "http", "url": "https://taskweft-mcp.fly.dev/" } } }
+{ "mcpServers": { "taskweft": { "type": "http", "url": "https://taskweft-mcp.fly.dev/mcp" } } }
 ```
 
 No header needed — the client discovers and drives the OAuth flow (GitHub
@@ -36,8 +39,9 @@ invalidates every outstanding token).
 ```sh
 podman build -t taskweft-mcp -f Containerfile .
 podman run --rm -p 8080:8080 -e TASKWEFT_TOKEN_SECRET=devkey... taskweft-mcp
-curl -s localhost:8080/health                                            # ok
-curl -s -o /dev/null -w '%{http_code}\n' -X POST localhost:8080/ -d '{}'  # 401
+curl -s localhost:8080/health                                                # ok
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8080/                      # 200 (landing page)
+curl -s -o /dev/null -w '%{http_code}\n' -X POST localhost:8080/mcp -d '{}'   # 401
 ```
 
 A full sign-in round-trip needs a real GitHub OAuth App — GitHub is the
