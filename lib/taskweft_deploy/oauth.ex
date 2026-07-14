@@ -18,6 +18,8 @@ defmodule TaskweftDeploy.OAuth do
   the GitHub OAuth app credentials and the login/org whitelist.
   """
 
+  require Logger
+
   alias TaskweftDeploy.Artifact
 
   @github_authorize "https://github.com/login/oauth/authorize"
@@ -132,8 +134,12 @@ defmodule TaskweftDeploy.OAuth do
 
       {:ok, redirect_with(ctx["redirect_uri"], %{"code" => code, "state" => ctx["cs"]})}
     else
-      {:error, :forbidden} -> callback_error(state, "access_denied")
-      _ -> callback_error(state, "server_error")
+      {:error, :forbidden} ->
+        callback_error(state, "access_denied")
+
+      other ->
+        Logger.error("MCP OAuth callback failed: #{inspect(other)}")
+        callback_error(state, "server_error")
     end
   end
 
@@ -201,8 +207,8 @@ defmodule TaskweftDeploy.OAuth do
         login = user["preferred_username"] || user["nickname"] || user["login"]
         if is_binary(login), do: {:ok, login, token}, else: {:error, :no_login}
 
-      _ ->
-        {:error, :github_exchange_failed}
+      {:error, reason} ->
+        {:error, {:github_exchange_failed, reason}}
     end
   end
 
@@ -245,8 +251,11 @@ defmodule TaskweftDeploy.OAuth do
 
   defp member_of_whitelisted_org?(_, _), do: false
 
-  # Just `read:user` — never `read:org`. See member_of_whitelisted_org?/2 for why.
-  defp github_scope, do: "read:user"
+  # `read:user,user:email` — never `read:org` (see member_of_whitelisted_org?/2).
+  # `user:email` is required: Assent.Strategy.Github.fetch_user/2 unconditionally
+  # also calls GET /user/emails, which 403s without it, failing the whole
+  # exchange (surfaced as an opaque "server_error" on the client redirect).
+  defp github_scope, do: "read:user,user:email"
 
   # ── helpers ─────────────────────────────────────────────────────────────────
 
