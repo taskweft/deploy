@@ -41,7 +41,7 @@ defmodule TaskweftDeploy.Router do
 
   # Version follows the dev/beta/rc/release ladder (v<major>.<minor>.<patch>-<stage>.<N>);
   # bump alongside the git tag created after each deploy.
-  @release_version "0.1.0-rc.1"
+  @release_version "0.1.0"
 
   get "/health" do
     send_json(conn, 200, %{"status" => "ok", "version" => @release_version})
