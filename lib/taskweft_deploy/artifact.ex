@@ -13,10 +13,17 @@ defmodule TaskweftDeploy.Artifact do
   must hold). Any caveat the verifier doesn't recognize fails closed, so
   attenuation can only ever narrow authority.
 
-    * `:client` — dynamic-registration client_id → `%{"uris" => [...], "name" => ...}`
-    * `:state`  — GitHub-leg context → client_id, redirect_uri, PKCE, client state
-    * `:code`   — our authorization code → client + PKCE + resolved login
-    * `:access` — the MCP bearer token → `%{"sub" => login}`
+    * `:client`  — dynamic-registration client_id → `%{"uris" => [...], "name" => ...}`
+    * `:state`   — GitHub-leg context → client_id, redirect_uri, PKCE, client state
+    * `:code`    — our authorization code → client + PKCE + resolved login
+    * `:access`  — the MCP bearer token → `%{"sub" => login}`
+    * `:refresh` — long-lived renewal credential → `%{"sub" => login}`; lets a
+      client silently mint a new `:access` token without a GitHub round-trip
+      (OAuth 2.1 practice: short access-token TTL + refresh token, rather than
+      one long-lived access token). Being stateless, a refresh isn't re-checked
+      against the whitelist/org membership — it trusts the `sub` the original
+      code exchange already verified — so tightening the whitelist doesn't
+      revoke an outstanding refresh token before its own `exp`.
 
   The root key is read at runtime from `:persistent_term`
   (`TaskweftDeploy.Application`, from `TASKWEFT_TOKEN_SECRET`).
@@ -24,7 +31,13 @@ defmodule TaskweftDeploy.Artifact do
 
   alias TaskweftDeploy.Macaroon
 
-  @ttl %{client: 90 * 24 * 3600, state: 600, code: 60, access: 3600}
+  @ttl %{
+    client: 90 * 24 * 3600,
+    state: 600,
+    code: 60,
+    access: 3600,
+    refresh: 180 * 24 * 3600
+  }
 
   @doc "Mint a bearer string for `purpose` carrying `payload`."
   @spec mint(atom(), map()) :: String.t()

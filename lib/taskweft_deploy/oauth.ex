@@ -43,7 +43,7 @@ defmodule TaskweftDeploy.OAuth do
       "token_endpoint" => base <> "/oauth/token",
       "registration_endpoint" => base <> "/oauth/register",
       "response_types_supported" => ["code"],
-      "grant_types_supported" => ["authorization_code"],
+      "grant_types_supported" => ["authorization_code", "refresh_token"],
       "code_challenge_methods_supported" => ["S256"],
       "token_endpoint_auth_methods_supported" => ["none"],
       "scopes_supported" => ["mcp"],
@@ -65,7 +65,7 @@ defmodule TaskweftDeploy.OAuth do
          "redirect_uris" => uris,
          "client_name" => name,
          "token_endpoint_auth_method" => "none",
-         "grant_types" => ["authorization_code"],
+         "grant_types" => ["authorization_code", "refresh_token"],
          "response_types" => ["code"],
          "client_id_issued_at" => System.system_time(:second)
        }}
@@ -158,27 +158,41 @@ defmodule TaskweftDeploy.OAuth do
 
   # ── Token endpoint ──────────────────────────────────────────────────────────
 
-  @doc "Exchange an authorization code (+ PKCE verifier) for an access token."
+  @doc "Exchange an authorization code (+ PKCE verifier) for an access + refresh token."
   def token(base, %{"grant_type" => "authorization_code"} = params) do
     with {:ok, payload} <- Artifact.verify(:code, params["code"] || ""),
          true <- params["client_id"] == payload["client_id"],
          true <- params["redirect_uri"] == payload["redirect_uri"],
          true <- pkce_ok?(params["code_verifier"], payload["cc"]) do
-      access = Artifact.mint(:access, %{"sub" => payload["sub"], "aud" => base})
-
-      {:ok,
-       %{
-         "access_token" => access,
-         "token_type" => "Bearer",
-         "expires_in" => Artifact.access_ttl(),
-         "scope" => "mcp"
-       }}
+      {:ok, token_response(payload["sub"], base)}
     else
       _ -> {:error, :invalid_grant}
     end
   end
 
+  @doc "Silently renew an access token from a refresh token — no GitHub round-trip."
+  def token(base, %{"grant_type" => "refresh_token", "refresh_token" => refresh}) do
+    case Artifact.verify(:refresh, refresh) do
+      {:ok, %{"sub" => login}} when is_binary(login) -> {:ok, token_response(login, base)}
+      _ -> {:error, :invalid_grant}
+    end
+  end
+
   def token(_base, _), do: {:error, :unsupported_grant_type}
+
+  # Mints a fresh access + refresh pair for `login`. Reusing the refresh token
+  # re-mints both (a sliding session) rather than rotating with revocation —
+  # there's no server-side state to revoke against, so rotation would add
+  # complexity without adding security here.
+  defp token_response(login, base) do
+    %{
+      "access_token" => Artifact.mint(:access, %{"sub" => login, "aud" => base}),
+      "refresh_token" => Artifact.mint(:refresh, %{"sub" => login}),
+      "token_type" => "Bearer",
+      "expires_in" => Artifact.access_ttl(),
+      "scope" => "mcp"
+    }
+  end
 
   # ── Resource-server guard ───────────────────────────────────────────────────
 
