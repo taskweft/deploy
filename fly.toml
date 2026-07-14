@@ -3,7 +3,7 @@
 # Scale-to-zero keeps idle cost near $0 (a 256mb shared-cpu-1x is ~$2/mo always-on).
 
 app = "taskweft-mcp"
-primary_region = "sea"
+primary_region = "sjc"
 
 [build]
   dockerfile = "Containerfile"
