@@ -217,6 +217,12 @@ defmodule TaskweftDeploy.OAuth do
     end
   end
 
+  # We deliberately never request `read:org` — GitHub's consent screen for it
+  # is "read your organization, team membership, and private project boards",
+  # far more than this whitelist needs. Without it, /user/orgs still lists the
+  # user's *public* org memberships, which is enough here; a private-only
+  # membership won't match (the member would need to make it public, or use
+  # their login directly if whitelisted).
   defp member_of_whitelisted_org?(%{"access_token" => access}, orgs) when is_binary(access) do
     case Req.get("https://api.github.com/user/orgs",
            headers: [
@@ -239,9 +245,8 @@ defmodule TaskweftDeploy.OAuth do
 
   defp member_of_whitelisted_org?(_, _), do: false
 
-  defp github_scope do
-    if MapSet.size(whitelist().orgs) > 0, do: "read:user read:org", else: "read:user"
-  end
+  # Just `read:user` — never `read:org`. See member_of_whitelisted_org?/2 for why.
+  defp github_scope, do: "read:user"
 
   # ── helpers ─────────────────────────────────────────────────────────────────
 
