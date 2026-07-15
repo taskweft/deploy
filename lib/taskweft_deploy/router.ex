@@ -42,7 +42,7 @@ defmodule TaskweftDeploy.Router do
 
   # Version follows the dev/beta/rc/release ladder (v<major>.<minor>.<patch>-<stage>.<N>);
   # bump alongside the git tag created after each deploy.
-  @release_version "0.1.0"
+  @release_version "0.1.1"
 
   get "/" do
     LandingPlug.call(conn, [])
