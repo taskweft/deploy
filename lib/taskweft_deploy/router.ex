@@ -23,9 +23,8 @@ defmodule TaskweftDeploy.Router do
   """
 
   use Plug.Router
-  require Logger
 
-  alias TaskweftDeploy.{BaseURL, LandingPlug, OAuth}
+  alias OAuthMCPBridge.{BaseURL, Guard, LandingPlug, OAuth}
 
   plug(Plug.Logger)
   plug(:match)
@@ -117,33 +116,12 @@ defmodule TaskweftDeploy.Router do
   # ── auth gate for the MCP endpoint ──────────────────────────────────────────
 
   defp mcp_guard(conn, _opts) do
-    if public_path?(conn), do: conn, else: require_bearer(conn)
+    if public_path?(conn), do: conn, else: Guard.require_bearer(conn)
   end
 
   defp public_path?(conn) do
     p = conn.request_path
     p == "/" or p == "/health" or String.starts_with?(p, "/.well-known/") or String.starts_with?(p, "/oauth/")
-  end
-
-  defp require_bearer(conn) do
-    with ["Bearer " <> token] <- get_req_header(conn, "authorization"),
-         {:ok, login} <- OAuth.verify_access(token) do
-      assign(conn, :github_login, login)
-    else
-      _ -> unauthorized(conn)
-    end
-  end
-
-  defp unauthorized(conn) do
-    resource = BaseURL.get(conn) <> "/.well-known/oauth-protected-resource"
-
-    conn
-    |> put_resp_header(
-      "www-authenticate",
-      ~s(Bearer resource_metadata="#{resource}", error="invalid_token")
-    )
-    |> send_json(401, %{"error" => "invalid_token"})
-    |> halt()
   end
 
   # ── helpers ─────────────────────────────────────────────────────────────────

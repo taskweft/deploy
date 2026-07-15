@@ -4,9 +4,9 @@
 defmodule TaskweftDeploy.Application do
   @moduledoc """
   Boots the hosted Taskweft MCP server: a Cowboy endpoint running
-  `TaskweftDeploy.Router`, which bridges MCP-client OAuth to GitHub login and
-  gates MCP requests behind a macaroon access token. No database, no volume —
-  all OAuth state is a stateless macaroon (`TaskweftDeploy.Artifact`), so
+  `TaskweftDeploy.Router`, which bridges MCP-client OAuth to GitHub login (via
+  `oauth_mcp_bridge`) and gates MCP requests behind a macaroon access token.
+  No database, no volume — all OAuth state is a stateless macaroon, so
   scale-to-zero restarts lose nothing.
 
   Runtime env:
@@ -22,18 +22,36 @@ defmodule TaskweftDeploy.Application do
   use Application
   require Logger
 
+  alias OAuthMCPBridge.Whitelist
+
   @impl true
   def start(_type, _args) do
-    :persistent_term.put({:taskweft_deploy, :token_secret}, token_secret())
-    :persistent_term.put({:taskweft_deploy, :auth}, parse_allow(env("TASKWEFT_MCP_GH_ALLOW", "fire")))
+    :persistent_term.put({:oauth_mcp_bridge, :token_secret}, token_secret())
+    :persistent_term.put({:oauth_mcp_bridge, :auth}, Whitelist.parse(env("TASKWEFT_MCP_GH_ALLOW", "fire")))
 
     :persistent_term.put(
-      {:taskweft_deploy, :github},
+      {:oauth_mcp_bridge, :github},
       %{client_id: env("GITHUB_CLIENT_ID", ""), client_secret: env("GITHUB_CLIENT_SECRET", "")}
     )
 
+    :persistent_term.put({:oauth_mcp_bridge, :service}, %{
+      name: "Taskweft MCP",
+      documentation_url: "https://github.com/taskweft/deploy"
+    })
+
+    :persistent_term.put({:oauth_mcp_bridge, :page}, %{
+      title: "taskweft",
+      tagline:
+        "Hosted HTN planner MCP server — plan / replan over JSON-LD domains, gated by GitHub sign-in (OAuth 2.1).",
+      server_name: "taskweft",
+      links: [
+        {"taskweft/deploy", "https://github.com/taskweft/deploy"},
+        {"taskweft/taskweft", "https://github.com/taskweft/taskweft"}
+      ]
+    })
+
     case env("PUBLIC_BASE_URL", nil) do
-      url when is_binary(url) and url != "" -> :persistent_term.put({:taskweft_deploy, :base_url}, url)
+      url when is_binary(url) and url != "" -> :persistent_term.put({:oauth_mcp_bridge, :base_url}, url)
       _ -> :ok
     end
 
@@ -65,23 +83,5 @@ defmodule TaskweftDeploy.Application do
       "" -> default
       v -> v
     end
-  end
-
-  # "fire,@taskweft,org:V-Sekai-fire" -> %{logins: MapSet, orgs: MapSet}
-  defp parse_allow(str) do
-    {orgs, logins} =
-      str
-      |> String.split(",", trim: true)
-      |> Enum.map(&String.trim/1)
-      |> Enum.reject(&(&1 == ""))
-      |> Enum.split_with(&(String.starts_with?(&1, "@") or String.starts_with?(&1, "org:")))
-
-    %{
-      logins: MapSet.new(logins),
-      orgs:
-        orgs
-        |> Enum.map(fn o -> o |> String.trim_leading("@") |> String.trim_leading("org:") end)
-        |> MapSet.new()
-    }
   end
 end
