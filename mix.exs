@@ -27,7 +27,7 @@ defmodule TaskweftDeploy.MixProject do
     [
       # The entire taskweft featureset — planner NIF, MCP server, JSON-LD loader —
       # in one dep. Its OTP app starts nothing unless it is the Burrito binary.
-      {:taskweft, github: "taskweft/taskweft"},
+      {:taskweft, "~> 0.4.0-dev"},
       # The generic OAuth-to-MCP bridge (macaroons, GitHub OAuth, MCP bearer
       # guard) — extracted from this repo (taskweft/deploy#9) since none of it
       # is actually Fly-specific.
