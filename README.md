@@ -1,7 +1,15 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2026 K. S. Ernest (iFire) Lee -->
 
-# taskweft/deploy
+# taskweft/deploy (archived)
+
+**This repo moved.** It now lives at
+[`taskweft/taskweft`'s `deploy/` directory](https://github.com/taskweft/taskweft/tree/main/deploy) —
+folded into the monorepo to cut the friction of a separate
+publish-then-bump-then-redeploy chain for every taskweft change. This repo is
+archived and read-only; open issues/PRs against `taskweft/taskweft` instead.
+
+---
 
 Hosted **Taskweft MCP server**: `https://taskweft-mcp.fly.dev`. Wraps
 `{:taskweft, github: "taskweft/taskweft"}` behind an OAuth 2.1 → GitHub login
